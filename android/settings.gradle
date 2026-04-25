@@ -1,0 +1,13 @@
+pluginManagement {
+    includeBuild("../node_modules/@react-native/gradle-plugin")
+}
+plugins {
+    id("com.facebook.react.settings")
+}
+
+extensions.configure(com.facebook.react.ReactSettingsExtension) { ext ->
+    ext.autolinkLibrariesFromCommand()
+}
+rootProject.name = 'TgWsProxy'
+include ':app'
+includeBuild('../node_modules/@react-native/gradle-plugin')
