@@ -10,6 +10,7 @@ export const DEFAULT_CONFIG: ProxyConfig = {
   cfProxy: true,
   cfProxyPriority: true,
   cfProxyUserDomain: '',
+  dpiBypass: false,
 };
 
 export const CONFIG_STORAGE_KEY = '@tgwsproxy_config';

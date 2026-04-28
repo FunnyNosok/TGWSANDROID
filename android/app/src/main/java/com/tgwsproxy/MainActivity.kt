@@ -8,5 +8,5 @@ class MainActivity : ReactActivity() {
     override fun getMainComponentName(): String = "TgWsProxy"
 
     override fun createReactActivityDelegate(): ReactActivityDelegate =
-        DefaultReactActivityDelegate(this, mainComponentName, false)
+        DefaultReactActivityDelegate(this, mainComponentName)
 }

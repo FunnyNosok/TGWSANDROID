@@ -52,11 +52,16 @@ class RawWebSocket private constructor(
             }
         }
 
-        fun connect(host: String, domain: String, timeoutMs: Int = 10000): RawWebSocket {
+        fun connect(host: String, domain: String, timeoutMs: Int = 10000, dpiBypass: Boolean = false): RawWebSocket {
             val rawSocket = Socket()
             rawSocket.connect(InetSocketAddress(host, 443), timeoutMs)
             rawSocket.soTimeout = timeoutMs
             rawSocket.tcpNoDelay = true
+
+            if (dpiBypass) {
+                // Set small send buffer to encourage fragmentation
+                try { rawSocket.sendBufferSize = 256 } catch (_: Exception) {}
+            }
 
             val sslSocket = sslContext.socketFactory.createSocket(
                 rawSocket, domain, 443, true
@@ -75,18 +80,47 @@ class RawWebSocket private constructor(
                 Base64.NO_WRAP
             )
 
-            val req = "GET /apiws HTTP/1.1\r\n" +
-                    "Host: $domain\r\n" +
-                    "Upgrade: websocket\r\n" +
-                    "Connection: Upgrade\r\n" +
-                    "Sec-WebSocket-Key: $wsKey\r\n" +
-                    "Sec-WebSocket-Version: 13\r\n" +
-                    "Sec-WebSocket-Protocol: binary\r\n" +
-                    "User-Agent: Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36\r\n" +
-                    "\r\n"
+            val req = if (dpiBypass) {
+                // DPI bypass tricks for WebSocket Handshake (zapret style)
+                // 1. Host header case mixing (HOSт / hOsT)
+                // 2. Extra spaces in headers
+                // 3. Fake initial headers
+                "GET /apiws HTTP/1.1\r\n" +
+                        "hOsT:  $domain\r\n" +
+                        "UpGrAdE:   websocket\r\n" +
+                        "cOnNeCtIoN: Upgrade\r\n" +
+                        "Sec-WebSocket-Key: $wsKey\r\n" +
+                        "Sec-WebSocket-Version: 13\r\n" +
+                        "Sec-WebSocket-Protocol: binary\r\n" +
+                        "User-Agent: Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36\r\n" +
+                        "\r\n"
+            } else {
+                "GET /apiws HTTP/1.1\r\n" +
+                        "Host: $domain\r\n" +
+                        "Upgrade: websocket\r\n" +
+                        "Connection: Upgrade\r\n" +
+                        "Sec-WebSocket-Key: $wsKey\r\n" +
+                        "Sec-WebSocket-Version: 13\r\n" +
+                        "Sec-WebSocket-Protocol: binary\r\n" +
+                        "User-Agent: Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36\r\n" +
+                        "\r\n"
+            }
 
-            output.write(req.toByteArray(Charsets.UTF_8))
-            output.flush()
+            val reqBytes = req.toByteArray(Charsets.UTF_8)
+            
+            if (dpiBypass) {
+                // Write request in fragments to bypass some simple DPI filters (like ByeDPI / zapret does)
+                val fragmentSize = 2 // Small fragments to split methods and headers
+                for (i in reqBytes.indices step fragmentSize) {
+                    val end = minOf(i + fragmentSize, reqBytes.size)
+                    output.write(reqBytes, i, end - i)
+                    output.flush()
+                    Thread.sleep(1) // Tiny delay to ensure packets are sent separately
+                }
+            } else {
+                output.write(reqBytes)
+                output.flush()
+            }
 
             val responseLines = mutableListOf<String>()
             val lineBuffer = StringBuilder()
@@ -113,7 +147,7 @@ class RawWebSocket private constructor(
             val statusCode = parts.getOrNull(1)?.toIntOrNull() ?: 0
 
             if (statusCode == 101) {
-                sslSocket.soTimeout = 0
+                sslSocket.soTimeout = 90000
                 return RawWebSocket(sslSocket, input, output)
             }
 
@@ -129,29 +163,32 @@ class RawWebSocket private constructor(
             throw WsHandshakeError(statusCode, firstLine, headers, headers["location"])
         }
 
-        private fun xorMask(data: ByteArray, mask: ByteArray): ByteArray {
-            val result = data.copyOf()
-            for (i in result.indices) {
-                result[i] = (result[i].toInt() xor mask[i % 4].toInt()).toByte()
+        private fun xorMask(data: ByteArray, offset: Int, length: Int, mask: ByteArray): ByteArray {
+            val result = ByteArray(length)
+            for (i in 0 until length) {
+                result[i] = (data[offset + i].toInt() xor mask[i % 4].toInt()).toByte()
             }
             return result
         }
 
-        private fun buildFrame(opcode: Int, data: ByteArray, mask: Boolean): ByteArray {
-            val length = data.size
+        private fun buildFrame(opcode: Int, data: ByteArray, offset: Int, length: Int, mask: Boolean): ByteArray {
             val fb = (0x80 or opcode).toByte()
 
             if (!mask) {
                 return when {
                     length < 126 -> {
-                        byteArrayOf(fb, length.toByte()) + data
+                        val buf = ByteArray(2 + length)
+                        buf[0] = fb
+                        buf[1] = length.toByte()
+                        System.arraycopy(data, offset, buf, 2, length)
+                        buf
                     }
                     length < 65536 -> {
                         val buf = ByteBuffer.allocate(4 + length).order(ByteOrder.BIG_ENDIAN)
                         buf.put(fb)
                         buf.put(126.toByte())
                         buf.putShort(length.toShort())
-                        buf.put(data)
+                        buf.put(data, offset, length)
                         buf.array()
                     }
                     else -> {
@@ -159,7 +196,7 @@ class RawWebSocket private constructor(
                         buf.put(fb)
                         buf.put(127.toByte())
                         buf.putLong(length.toLong())
-                        buf.put(data)
+                        buf.put(data, offset, length)
                         buf.array()
                     }
                 }
@@ -167,11 +204,16 @@ class RawWebSocket private constructor(
 
             val maskKey = ByteArray(4)
             SecureRandom().nextBytes(maskKey)
-            val masked = xorMask(data, maskKey)
+            val masked = xorMask(data, offset, length, maskKey)
 
             return when {
                 length < 126 -> {
-                    byteArrayOf(fb, (0x80 or length).toByte()) + maskKey + masked
+                    val buf = ByteArray(6 + length)
+                    buf[0] = fb
+                    buf[1] = (0x80 or length).toByte()
+                    System.arraycopy(maskKey, 0, buf, 2, 4)
+                    System.arraycopy(masked, 0, buf, 6, length)
+                    buf
                 }
                 length < 65536 -> {
                     val buf = ByteBuffer.allocate(8 + length).order(ByteOrder.BIG_ENDIAN)
@@ -195,9 +237,9 @@ class RawWebSocket private constructor(
         }
     }
 
-    fun send(data: ByteArray) {
+    fun send(data: ByteArray, offset: Int = 0, length: Int = data.size) {
         if (closed) throw IOException("WebSocket closed")
-        val frame = buildFrame(OP_BINARY, data, mask = true)
+        val frame = buildFrame(OP_BINARY, data, offset, length, mask = true)
         synchronized(output) {
             output.write(frame)
             output.flush()
@@ -208,7 +250,7 @@ class RawWebSocket private constructor(
         if (closed) throw IOException("WebSocket closed")
         synchronized(output) {
             for (part in parts) {
-                output.write(buildFrame(OP_BINARY, part, mask = true))
+                output.write(buildFrame(OP_BINARY, part, 0, part.size, mask = true))
             }
             output.flush()
         }
@@ -223,8 +265,9 @@ class RawWebSocket private constructor(
                     closed = true
                     try {
                         synchronized(output) {
+                            val closePayload = if (payload.size >= 2) payload.sliceArray(0..1) else byteArrayOf()
                             output.write(
-                                buildFrame(OP_CLOSE, if (payload.size >= 2) payload.sliceArray(0..1) else byteArrayOf(), mask = true)
+                                buildFrame(OP_CLOSE, closePayload, 0, closePayload.size, mask = true)
                             )
                             output.flush()
                         }
@@ -234,7 +277,7 @@ class RawWebSocket private constructor(
                 OP_PING -> {
                     try {
                         synchronized(output) {
-                            output.write(buildFrame(OP_PONG, payload, mask = true))
+                            output.write(buildFrame(OP_PONG, payload, 0, payload.size, mask = true))
                             output.flush()
                         }
                     } catch (_: Exception) {}
@@ -267,7 +310,7 @@ class RawWebSocket private constructor(
         val payload = readExactly(input, length.toInt()) ?: return null
 
         return if (maskKey != null) {
-            opcode to xorMask(payload, maskKey)
+            opcode to xorMask(payload, 0, payload.size, maskKey)
         } else {
             opcode to payload
         }
@@ -285,12 +328,25 @@ class RawWebSocket private constructor(
         return buf
     }
 
+    fun sendPing(): Boolean {
+        if (closed) return false
+        return try {
+            synchronized(output) {
+                output.write(buildFrame(OP_PING, byteArrayOf(), 0, 0, mask = true))
+                output.flush()
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun close() {
         if (closed) return
         closed = true
         try {
             synchronized(output) {
-                output.write(buildFrame(OP_CLOSE, byteArrayOf(), mask = true))
+                output.write(buildFrame(OP_CLOSE, byteArrayOf(), 0, 0, mask = true))
                 output.flush()
             }
         } catch (_: Exception) {}

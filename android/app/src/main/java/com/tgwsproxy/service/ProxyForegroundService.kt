@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
@@ -18,6 +19,7 @@ class ProxyForegroundService : Service() {
 
     private var engine: ProxyEngine? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -32,9 +34,11 @@ class ProxyForegroundService : Service() {
         val config = extractConfig(intent)
         startForeground(NOTIFICATION_ID, buildNotification(config))
         acquireWakeLock()
+        acquireWifiLock()
 
         engine?.stop()
         engine = ProxyEngine(config).also { it.start() }
+        currentEngine = engine
 
         Log.i(TAG, "Foreground service started")
         return START_STICKY
@@ -43,7 +47,9 @@ class ProxyForegroundService : Service() {
     override fun onDestroy() {
         engine?.stop()
         engine = null
+        currentEngine = null
         releaseWakeLock()
+        releaseWifiLock()
         Log.i(TAG, "Foreground service destroyed")
         super.onDestroy()
     }
@@ -70,7 +76,7 @@ class ProxyForegroundService : Service() {
             .setOngoing(true)
             .setContentIntent(pendingOpen)
             .addAction(0, "Stop", pendingStop)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
@@ -90,25 +96,66 @@ class ProxyForegroundService : Service() {
         wakeLock = null
     }
 
+    @Suppress("DEPRECATION")
+    private fun acquireWifiLock() {
+        val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
+        wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "TgWsProxy::WifiLock")
+            .apply { acquire() }
+    }
+
+    private fun releaseWifiLock() {
+        wifiLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wifiLock = null
+    }
+
     private fun extractConfig(intent: Intent?): ProxyConfig {
         val config = ProxyConfig()
+        var hasExtras = false
         intent?.extras?.let { b ->
-            config.host = b.getString("host", config.host)
-            config.port = b.getInt("port", config.port)
-            config.secret = b.getString("secret", config.secret)
-            config.bufferSize = b.getInt("bufferSizeKb", 256) * 1024
-            config.poolSize = b.getInt("poolSize", config.poolSize)
-            config.fallbackCfProxy = b.getBoolean("cfProxy", config.fallbackCfProxy)
-            config.fallbackCfProxyPriority = b.getBoolean("cfProxyPriority", config.fallbackCfProxyPriority)
-            config.cfProxyUserDomain = b.getString("cfProxyUserDomain", config.cfProxyUserDomain)
+            if (b.containsKey("host")) {
+                hasExtras = true
+                config.host = b.getString("host", config.host)
+                config.port = b.getInt("port", config.port)
+                config.secret = b.getString("secret", config.secret)
+                config.bufferSize = b.getInt("bufferSizeKb", 256) * 1024
+                config.poolSize = b.getInt("poolSize", config.poolSize)
+                config.fallbackCfProxy = b.getBoolean("cfProxy", config.fallbackCfProxy)
+                config.fallbackCfProxyPriority = b.getBoolean("cfProxyPriority", config.fallbackCfProxyPriority)
+                config.cfProxyUserDomain = b.getString("cfProxyUserDomain", config.cfProxyUserDomain)
+                config.dpiBypass = b.getBoolean("dpiBypass", config.dpiBypass)
 
-            val dcIps = b.getStringArrayList("dcIps")
-            if (!dcIps.isNullOrEmpty()) {
+                val dcIps = b.getStringArrayList("dcIps")
+                if (!dcIps.isNullOrEmpty()) {
+                    try {
+                        config.dcRedirects = ProxyConfig.parseDcIpList(dcIps)
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+        
+        if (!hasExtras) {
+            // Read from SharedPreferences if intent is null or empty (e.g., restarted by system)
+            val prefs = getSharedPreferences("TgWsProxyPrefs", android.content.Context.MODE_PRIVATE)
+            config.host = prefs.getString("host", config.host) ?: config.host
+            config.port = prefs.getInt("port", config.port)
+            config.secret = prefs.getString("secret", config.secret) ?: config.secret
+            config.bufferSize = prefs.getInt("bufferSizeKb", 256) * 1024
+            config.poolSize = prefs.getInt("poolSize", config.poolSize)
+            config.fallbackCfProxy = prefs.getBoolean("cfProxy", config.fallbackCfProxy)
+            config.fallbackCfProxyPriority = prefs.getBoolean("cfProxyPriority", config.fallbackCfProxyPriority)
+            config.cfProxyUserDomain = prefs.getString("cfProxyUserDomain", config.cfProxyUserDomain) ?: config.cfProxyUserDomain
+            config.dpiBypass = prefs.getBoolean("dpiBypass", config.dpiBypass)
+            
+            val dcIpsStr = prefs.getString("dcIps", "")
+            if (!dcIpsStr.isNullOrEmpty()) {
                 try {
-                    config.dcRedirects = ProxyConfig.parseDcIpList(dcIps)
+                    config.dcRedirects = ProxyConfig.parseDcIpList(dcIpsStr.split(","))
                 } catch (_: Exception) {}
             }
         }
+        
         return config
     }
 

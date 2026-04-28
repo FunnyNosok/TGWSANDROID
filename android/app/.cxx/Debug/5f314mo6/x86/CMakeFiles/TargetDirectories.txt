@@ -1,0 +1,15 @@
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/CMakeFiles/appmodules.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/CMakeFiles/rebuild_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/rnasyncstorage_autolinked_build/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/rnasyncstorage_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/rnclipboard_autolinked_build/CMakeFiles/react_codegen_rnclipboard.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/rnclipboard_autolinked_build/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/rnclipboard_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/safeareacontext_autolinked_build/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/safeareacontext_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/rnscreens_autolinked_build/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/Debug/5f314mo6/x86/rnscreens_autolinked_build/CMakeFiles/rebuild_cache.dir

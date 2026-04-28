@@ -1,17 +1,17 @@
 package com.tgwsproxy.bridge
 
+import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.net.Uri
+import android.provider.Settings
 import com.facebook.react.bridge.*
 import com.tgwsproxy.proxy.ProxyConfig
-import com.tgwsproxy.proxy.ProxyEngine
 import com.tgwsproxy.proxy.ProxyStats
 import com.tgwsproxy.service.ProxyForegroundService
 
 class ProxyModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
-
-    private var engine: ProxyEngine? = null
 
     override fun getName(): String = "ProxyModule"
 
@@ -26,7 +26,8 @@ class ProxyModule(private val reactContext: ReactApplicationContext) :
                 poolSize = if (config.hasKey("poolSize")) config.getInt("poolSize") else 4,
                 fallbackCfProxy = if (config.hasKey("cfProxy")) config.getBoolean("cfProxy") else true,
                 fallbackCfProxyPriority = if (config.hasKey("cfProxyPriority")) config.getBoolean("cfProxyPriority") else true,
-                cfProxyUserDomain = config.getString("cfProxyUserDomain") ?: ""
+                cfProxyUserDomain = config.getString("cfProxyUserDomain") ?: "",
+                dpiBypass = if (config.hasKey("dpiBypass")) config.getBoolean("dpiBypass") else false
             )
 
             if (config.hasKey("dcIps")) {
@@ -46,6 +47,7 @@ class ProxyModule(private val reactContext: ReactApplicationContext) :
                 putExtra("cfProxy", proxyConfig.fallbackCfProxy)
                 putExtra("cfProxyPriority", proxyConfig.fallbackCfProxyPriority)
                 putExtra("cfProxyUserDomain", proxyConfig.cfProxyUserDomain)
+                putExtra("dpiBypass", proxyConfig.dpiBypass)
                 putStringArrayListExtra("dcIps",
                     ArrayList(proxyConfig.dcRedirects.map { "${it.key}:${it.value}" })
                 )
@@ -57,7 +59,23 @@ class ProxyModule(private val reactContext: ReactApplicationContext) :
                 reactContext.startService(intent)
             }
 
-            engine = ProxyEngine(proxyConfig)
+            // Save to SharedPreferences for autostart
+            val prefs = reactContext.getSharedPreferences("TgWsProxyPrefs", Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                putBoolean("is_running", true)
+                putString("host", proxyConfig.host)
+                putInt("port", proxyConfig.port)
+                putString("secret", proxyConfig.secret)
+                putInt("bufferSizeKb", proxyConfig.bufferSize / 1024)
+                putInt("poolSize", proxyConfig.poolSize)
+                putBoolean("cfProxy", proxyConfig.fallbackCfProxy)
+                putBoolean("cfProxyPriority", proxyConfig.fallbackCfProxyPriority)
+                putString("cfProxyUserDomain", proxyConfig.cfProxyUserDomain)
+                putBoolean("dpiBypass", proxyConfig.dpiBypass)
+                putString("dcIps", proxyConfig.dcRedirects.map { "${it.key}:${it.value}" }.joinToString(","))
+                apply()
+            }
+
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("START_ERROR", e.message, e)
@@ -69,7 +87,10 @@ class ProxyModule(private val reactContext: ReactApplicationContext) :
         try {
             val intent = Intent(reactContext, ProxyForegroundService::class.java)
             reactContext.stopService(intent)
-            engine = null
+
+            val prefs = reactContext.getSharedPreferences("TgWsProxyPrefs", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("is_running", false).apply()
+
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("STOP_ERROR", e.message, e)
@@ -84,7 +105,7 @@ class ProxyModule(private val reactContext: ReactApplicationContext) :
             for ((key, value) in stats) {
                 map.putDouble(key, value.toDouble())
             }
-            map.putBoolean("isRunning", engine != null)
+            map.putBoolean("isRunning", ProxyForegroundService.currentEngine?.isRunning == true)
             promise.resolve(map)
         } catch (e: Exception) {
             promise.reject("STATS_ERROR", e.message, e)
@@ -93,7 +114,7 @@ class ProxyModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun isRunning(promise: Promise) {
-        promise.resolve(engine != null)
+        promise.resolve(ProxyForegroundService.currentEngine?.isRunning == true)
     }
 
     @ReactMethod
@@ -109,10 +130,34 @@ class ProxyModule(private val reactContext: ReactApplicationContext) :
     fun getLogs(promise: Promise) {
         try {
             val logs = Arguments.createArray()
-            engine?.getLogs()?.forEach { logs.pushString(it) }
+            ProxyForegroundService.currentEngine?.getLogs()?.forEach { logs.pushString(it) }
             promise.resolve(logs)
         } catch (e: Exception) {
             promise.reject("LOGS_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun checkAndRequestBatteryOptimizations(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = reactContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                val packageName = reactContext.packageName
+                if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    reactContext.startActivity(intent)
+                    promise.resolve(false) // Means it wasn't ignoring, requested now
+                } else {
+                    promise.resolve(true) // Already ignoring
+                }
+            } else {
+                promise.resolve(true) // Not needed for old Android versions
+            }
+        } catch (e: Exception) {
+            promise.reject("BATTERY_OPT_ERROR", e.message, e)
         }
     }
 }

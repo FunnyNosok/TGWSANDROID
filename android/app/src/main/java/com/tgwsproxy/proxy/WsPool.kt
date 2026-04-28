@@ -4,6 +4,8 @@ import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val TAG = "TgProxy-WsPool"
@@ -17,6 +19,35 @@ class WsPool(private val config: ProxyConfig) {
     private val refilling = ConcurrentHashMap.newKeySet<PoolKey>()
     private val executor = Executors.newCachedThreadPool { r ->
         Thread(r).apply { isDaemon = true; name = "ws-pool-${id}" }
+    }
+    private val keepAliveExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r).apply { isDaemon = true; name = "ws-pool-keepalive" }
+    }
+
+    init {
+        keepAliveExecutor.scheduleWithFixedDelay({
+            pingAll()
+        }, 30, 30, TimeUnit.SECONDS)
+    }
+
+    private fun pingAll() {
+        val now = System.currentTimeMillis()
+        for ((_, bucket) in idle) {
+            val it = bucket.iterator()
+            while (it.hasNext()) {
+                val entry = it.next()
+                val age = now - entry.createdAt
+                if (age > Constants.WS_POOL_MAX_AGE || entry.ws.isClosed) {
+                    it.remove()
+                    try { entry.ws.close() } catch (_: Exception) {}
+                } else {
+                    if (!entry.ws.sendPing()) {
+                        it.remove()
+                        try { entry.ws.close() } catch (_: Exception) {}
+                    }
+                }
+            }
+        }
     }
 
     fun get(dc: Int, isMedia: Boolean, targetIp: String, domains: List<String>): RawWebSocket? {
@@ -66,7 +97,7 @@ class WsPool(private val config: ProxyConfig) {
     private fun connectOne(targetIp: String, domains: List<String>): RawWebSocket? {
         for (domain in domains) {
             try {
-                return RawWebSocket.connect(targetIp, domain, timeoutMs = 8000)
+                return RawWebSocket.connect(targetIp, domain, timeoutMs = 12000, dpiBypass = config.dpiBypass)
             } catch (e: WsHandshakeError) {
                 if (e.isRedirect) continue
                 return null
@@ -101,5 +132,6 @@ class WsPool(private val config: ProxyConfig) {
     fun shutdown() {
         reset()
         executor.shutdownNow()
+        keepAliveExecutor.shutdownNow()
     }
 }

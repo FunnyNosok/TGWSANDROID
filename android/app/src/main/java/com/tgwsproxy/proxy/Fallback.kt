@@ -66,11 +66,20 @@ object Fallback {
 
         var ws: RawWebSocket? = null
         var chosenDomain: String? = null
+        
+        // Use Cloudflare Anycast IPs directly to avoid DNS poisoning and broken IPv6 on cellular networks
+        val cfIps = listOf(
+            "104.21.73.10", "172.67.199.20", "104.18.25.100",
+            "141.101.120.50", "188.114.96.0", "162.159.135.42",
+            "2606:4700:3031::6815:490a", "2606:4700:3032::ac43:c714",
+            "2606:4700:3034::8d65:7832", "2606:4700:3036::a29f:872a"
+        )
 
         for (baseDomain in Balancer.getDomainsForDc(dc)) {
             val domain = "kws$dc.$baseDomain"
+            val cfIp = cfIps.random()
             try {
-                ws = RawWebSocket.connect(domain, domain, timeoutMs = 10000)
+                ws = RawWebSocket.connect(cfIp, domain, timeoutMs = 10000, dpiBypass = config.dpiBypass)
                 chosenDomain = baseDomain
                 break
             } catch (e: Exception) {

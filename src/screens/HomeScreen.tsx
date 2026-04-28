@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useEffect} from 'react';
 import {
   View,
   Text,
@@ -24,12 +24,22 @@ export default function HomeScreen({navigation}: Props) {
   const {config} = useSettings();
   const [running, setRunning] = useState(false);
 
+  const isRunning = stats?.isRunning || running;
+
+  useEffect(() => {
+    if (stats?.isRunning !== undefined) {
+      setRunning(stats.isRunning);
+    }
+  }, [stats?.isRunning]);
+
   const handleToggle = useCallback(async () => {
     try {
       if (running) {
         await ProxyModule.stopProxy();
         setRunning(false);
       } else {
+        // Request battery optimizations before starting
+        await ProxyModule.checkAndRequestBatteryOptimizations().catch(() => {});
         await ProxyModule.startProxy(config);
         setRunning(true);
       }
@@ -40,18 +50,16 @@ export default function HomeScreen({navigation}: Props) {
 
   const handleOpenTelegram = useCallback(() => {
     const link = generateProxyLink(config);
-    Linking.openURL(link).catch(() => {
-      Alert.alert('Error', 'Failed to open Telegram');
+    Linking.openURL(link).catch((err) => {
+      console.error(err);
     });
   }, [config]);
 
   const handleCopyLink = useCallback(() => {
     const link = generateProxyLink(config);
     Clipboard.setString(link);
-    Alert.alert('Copied', 'Proxy link copied to clipboard');
   }, [config]);
 
-  const isRunning = stats?.isRunning || running;
   const poolTotal = (stats?.poolHits || 0) + (stats?.poolMisses || 0);
   const poolRate =
     poolTotal > 0

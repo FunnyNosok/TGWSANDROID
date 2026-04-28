@@ -1,0 +1,15 @@
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/CMakeFiles/appmodules.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/CMakeFiles/rebuild_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/rnasyncstorage_autolinked_build/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/rnasyncstorage_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/rnclipboard_autolinked_build/CMakeFiles/react_codegen_rnclipboard.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/rnclipboard_autolinked_build/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/rnclipboard_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/safeareacontext_autolinked_build/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/safeareacontext_autolinked_build/CMakeFiles/rebuild_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/rnscreens_autolinked_build/CMakeFiles/edit_cache.dir
+C:/Users/danil/Desktop/tg-ws-proxy-android/android/app/.cxx/RelWithDebInfo/1f584w4q/arm64-v8a/rnscreens_autolinked_build/CMakeFiles/rebuild_cache.dir

@@ -14,7 +14,8 @@ export default function FirstRunScreen({config, onDone}: Props) {
 
   const handleOpenTelegram = () => {
     Linking.openURL(link).catch(() => {});
-    onDone();
+    // Give it a tiny delay to ensure intent starts before unmounting
+    setTimeout(onDone, 300);
   };
 
   const handleCopyAndDone = () => {

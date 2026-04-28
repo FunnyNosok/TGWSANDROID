@@ -15,6 +15,7 @@ data class ProxyConfig(
     var fallbackCfProxy: Boolean = true,
     var fallbackCfProxyPriority: Boolean = true,
     var cfProxyUserDomain: String = "",
+    var dpiBypass: Boolean = false,
     var fakeTlsDomain: String = "",
     var proxyProtocol: Boolean = false
 ) {

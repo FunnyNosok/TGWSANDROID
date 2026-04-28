@@ -58,7 +58,9 @@ class ProxyEngine(val config: ProxyConfig) {
         val link = proxyLink()
         logMessage("Connect: $link")
 
-        wsPool.warmup(config.dcRedirects)
+        if (!config.fallbackCfProxy || !config.fallbackCfProxyPriority) {
+            wsPool.warmup(config.dcRedirects)
+        }
 
         acceptThread = Thread({
             while (running.get() && !ss.isClosed) {
@@ -126,7 +128,11 @@ class ProxyEngine(val config: ProxyConfig) {
             val input = clientSocket.getInputStream()
             val output = clientSocket.getOutputStream()
 
+            
+            clientSocket.soTimeout = 5000
             val handshake = readExactly(input, Constants.HANDSHAKE_LEN)
+            clientSocket.soTimeout = 0 
+
             if (handshake == null) {
                 logMessage("[$label] client disconnected before handshake")
                 return
@@ -157,20 +163,35 @@ class ProxyEngine(val config: ProxyConfig) {
             val ctx = CryptoContext.build(clientDecPrekeyIv, secret, relayInit)
 
             val dcKey = "$dcId${if (isMedia) "m" else ""}"
+            val useCfPriority = config.fallbackCfProxy && config.fallbackCfProxyPriority
 
-            if (dcId !in config.dcRedirects || dcKey in wsBlacklist) {
-                val reason = if (dcId !in config.dcRedirects) "not in config" else "WS blacklisted"
+            if (dcId !in config.dcRedirects || dcKey in wsBlacklist || useCfPriority) {
+                val reason = when {
+                    dcId !in config.dcRedirects -> "not in config"
+                    useCfPriority -> "CF proxy priority"
+                    else -> "WS blacklisted"
+                }
                 logMessage("[$label] DC$dcId$mediaTag $reason -> fallback")
 
                 val splitter = try { MsgSplitter(relayInit, protoInt) } catch (_: Exception) { null }
                 val ok = Fallback.doFallback(input, output, relayInit, label, dcId, isMedia, mediaTag, ctx, config, splitter)
-                if (!ok) logMessage("[$label] DC$dcId$mediaTag no fallback available")
-                return
+                
+                if (ok) {
+                    if (reason != "CF proxy priority") logMessage("[$label] DC$dcId$mediaTag fallback closed")
+                    return
+                }
+                
+                if (useCfPriority && dcId in config.dcRedirects) {
+                    logMessage("[$label] DC$dcId$mediaTag CF proxy priority failed, trying direct WS")
+                } else {
+                    logMessage("[$label] DC$dcId$mediaTag no fallback available")
+                    return
+                }
             }
 
             val now = System.currentTimeMillis()
             val failUntil = dcFailUntil[dcKey] ?: 0L
-            val wsTimeout = if (now < failUntil) (Constants.WS_FAIL_TIMEOUT * 1000).toInt() else 10000
+            val wsTimeout = if (now < failUntil) (Constants.WS_FAIL_TIMEOUT * 1000).toInt() else 15000
 
             val domains = Constants.wsDomainsForDc(dcId, isMedia)
             val target = config.dcRedirects[dcId]!!
@@ -186,7 +207,7 @@ class ProxyEngine(val config: ProxyConfig) {
                     val url = "wss://$domain/apiws"
                     logMessage("[$label] DC$dcId$mediaTag -> $url via $target")
                     try {
-                        ws = RawWebSocket.connect(target, domain, timeoutMs = wsTimeout)
+                        ws = RawWebSocket.connect(target, domain, timeoutMs = wsTimeout, dpiBypass = config.dpiBypass)
                         allRedirects = false
                         break
                     } catch (e: WsHandshakeError) {
@@ -218,9 +239,11 @@ class ProxyEngine(val config: ProxyConfig) {
                     }
                 }
 
-                val splitter = try { MsgSplitter(relayInit, protoInt) } catch (_: Exception) { null }
-                val ok = Fallback.doFallback(input, output, relayInit, label, dcId, isMedia, mediaTag, ctx, config, splitter)
-                if (ok) logMessage("[$label] DC$dcId$mediaTag fallback closed")
+                if (!useCfPriority) {
+                    val splitter = try { MsgSplitter(relayInit, protoInt) } catch (_: Exception) { null }
+                    val ok = Fallback.doFallback(input, output, relayInit, label, dcId, isMedia, mediaTag, ctx, config, splitter)
+                    if (ok) logMessage("[$label] DC$dcId$mediaTag fallback closed")
+                }
                 return
             }
 

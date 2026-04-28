@@ -137,6 +137,17 @@ export default function SettingsScreen({navigation}: Props) {
         autoCapitalize="none"
       />
 
+      <Text style={styles.sectionTitle}>Anti-Censorship</Text>
+
+      <SwitchRow
+        label="DPI Bypass (TCP Fragmentation)"
+        value={draft.dpiBypass}
+        onValueChange={v => update('dpiBypass', v)}
+      />
+      <Text style={styles.helperText}>
+        Helps to bypass DPI blocks on cellular networks by splitting WS handshake packets.
+      </Text>
+
       <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
         <Text style={styles.saveText}>Save Settings</Text>
       </TouchableOpacity>
@@ -215,4 +226,11 @@ const styles = StyleSheet.create({
     marginTop: 30,
   },
   saveText: {color: '#FFF', fontSize: 16, fontWeight: '700'},
+  helperText: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 15,
+    marginTop: -10,
+    paddingHorizontal: 4,
+  }
 });

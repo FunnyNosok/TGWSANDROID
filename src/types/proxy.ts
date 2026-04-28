@@ -8,6 +8,7 @@ export interface ProxyConfig {
   cfProxy: boolean;
   cfProxyPriority: boolean;
   cfProxyUserDomain: string;
+  dpiBypass: boolean;
 }
 
 export interface ProxyStats {

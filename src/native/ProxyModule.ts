@@ -17,4 +17,7 @@ export const ProxyModule = {
     NativeProxy.getProxyLink(config),
 
   getLogs: (): Promise<string[]> => NativeProxy.getLogs(),
+
+  checkAndRequestBatteryOptimizations: (): Promise<boolean> =>
+    NativeProxy.checkAndRequestBatteryOptimizations(),
 };

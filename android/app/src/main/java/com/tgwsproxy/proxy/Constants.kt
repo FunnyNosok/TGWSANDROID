@@ -46,8 +46,8 @@ object Constants {
     const val TLS_RECORD_APPDATA: Byte = 0x17
     const val TLS_APPDATA_MAX = 16384
 
-    const val DC_FAIL_COOLDOWN = 30.0
-    const val WS_FAIL_TIMEOUT = 2.0
+    const val DC_FAIL_COOLDOWN = 15.0
+    const val WS_FAIL_TIMEOUT = 8.0
     const val WS_POOL_MAX_AGE = 120_000L
 
     fun humanBytes(n: Long): String {

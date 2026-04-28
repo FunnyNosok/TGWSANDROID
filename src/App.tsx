@@ -38,8 +38,8 @@ function AppContent() {
     return (
       <FirstRunScreen
         config={config}
-        onDone={async () => {
-          await AsyncStorage.setItem(FIRST_RUN_KEY, 'done');
+        onDone={() => {
+          AsyncStorage.setItem(FIRST_RUN_KEY, 'done').catch(() => {});
           setFirstRun(false);
         }}
       />

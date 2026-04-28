@@ -47,17 +47,16 @@ object Bridge {
                     upBytes.addAndGet(n.toLong())
                     upPackets.incrementAndGet()
 
-                    val chunk = buf.sliceArray(0 until n)
-                    val plain = ctx.clientDecryptor.update(chunk)
-                    val encrypted = ctx.tgEncryptor.update(plain)
+                    ctx.clientDecryptor.update(buf, 0, n, buf, 0)
+                    ctx.tgEncryptor.update(buf, 0, n, buf, 0)
 
                     if (splitter != null) {
-                        val parts = splitter.split(encrypted)
+                        val parts = splitter.split(buf, 0, n)
                         if (parts.isEmpty()) continue
                         if (parts.size > 1) ws.sendBatch(parts)
                         else ws.send(parts[0])
                     } else {
-                        ws.send(encrypted)
+                        ws.send(buf, 0, n)
                     }
                 }
             } catch (_: Exception) {
@@ -75,11 +74,11 @@ object Bridge {
                     downBytes.addAndGet(data.size.toLong())
                     downPackets.incrementAndGet()
 
-                    val plain = ctx.tgDecryptor.update(data)
-                    val encrypted = ctx.clientEncryptor.update(plain)
+                    ctx.tgDecryptor.update(data, 0, data.size, data, 0)
+                    ctx.clientEncryptor.update(data, 0, data.size, data, 0)
 
                     synchronized(clientOutput) {
-                        clientOutput.write(encrypted)
+                        clientOutput.write(data)
                         clientOutput.flush()
                     }
                 }
@@ -129,19 +128,17 @@ object Bridge {
                     while (!done.get()) {
                         val n = src.read(buf)
                         if (n <= 0) break
-                        val chunk = buf.sliceArray(0 until n)
-                        val encrypted: ByteArray
                         if (isUp) {
                             ProxyStats.bytesUp.addAndGet(n.toLong())
-                            val plain = ctx.clientDecryptor.update(chunk)
-                            encrypted = ctx.tgEncryptor.update(plain)
+                            ctx.clientDecryptor.update(buf, 0, n, buf, 0)
+                            ctx.tgEncryptor.update(buf, 0, n, buf, 0)
                         } else {
                             ProxyStats.bytesDown.addAndGet(n.toLong())
-                            val plain = ctx.tgDecryptor.update(chunk)
-                            encrypted = ctx.clientEncryptor.update(plain)
+                            ctx.tgDecryptor.update(buf, 0, n, buf, 0)
+                            ctx.clientEncryptor.update(buf, 0, n, buf, 0)
                         }
                         synchronized(dst) {
-                            dst.write(encrypted)
+                            dst.write(buf, 0, n)
                             dst.flush()
                         }
                     }
