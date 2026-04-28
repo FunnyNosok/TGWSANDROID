@@ -1,0 +1,48 @@
+name: Bug Report
+description: Сообщить об ошибке или проблеме в работе прокси
+title: "[Bug]: "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за помощь в улучшении проекта! Пожалуйста, заполните форму ниже.
+  - type: textarea
+    id: description
+    attributes:
+      label: Описание проблемы
+      description: Подробно опишите, что пошло не так.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Шаги для воспроизведения
+      description: Как повторить ошибке?
+      placeholder: |
+        1. Открыть приложение
+        2. Нажать '...'
+        3. Ошибка...
+    validations:
+      required: true
+  - type: input
+    id: android_version
+    attributes:
+      label: Версия Android
+      placeholder: "Например: Android 14"
+    validations:
+      required: true
+  - type: input
+    id: app_version
+    attributes:
+      label: Версия приложения (Release tag)
+      placeholder: "Например: v1.0.0"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи (если есть)
+      description: Скопируйте логи из вкладки "Логи" в приложении.
+      render: shell

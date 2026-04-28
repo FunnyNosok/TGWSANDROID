@@ -1,0 +1,24 @@
+name: Feature Request
+description: Предложить новую функцию или улучшение
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за интерес к проекту! Расскажите нам о своей идее.
+  - type: textarea
+    id: feature_description
+    attributes:
+      label: Описание идеи
+      description: Подробно опишите, какую функцию вы хотели бы видеть.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую проблему это решает?
+      description: Расскажите, почему это важно и в каких ситуациях это пригодится.
+    validations:
+      required: false

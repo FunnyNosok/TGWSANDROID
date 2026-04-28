@@ -1,5 +1,8 @@
 # TG WS Proxy (Android)
 
+[![Build Android APK](https://github.com/FunnyNosok/TGWSANDROID/actions/workflows/build.yml/badge.svg)](https://github.com/FunnyNosok/TGWSANDROID/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Локальный MTProto-прокси сервер для Telegram на Android. 
 Это приложение позволяет обходить блокировки Telegram, перенаправляя трафик через WebSocket-соединения и резервные маршруты Cloudflare.
 
