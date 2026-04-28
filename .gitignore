@@ -31,3 +31,15 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Android build files
+android/.gradle/
+android/app/.cxx/
+android/app/build/
+android/build/
+*.apk
+
+# Logs
+*log*.txt
+fulllog.txt
+all_logcat.txt

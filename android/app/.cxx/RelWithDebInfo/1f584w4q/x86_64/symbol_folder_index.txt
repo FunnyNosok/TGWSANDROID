@@ -1,1 +1,0 @@
-C:\Users\danil\Desktop\tg-ws-proxy-android\android\app\build\intermediates\cxx\RelWithDebInfo\1f584w4q\obj\x86_64
