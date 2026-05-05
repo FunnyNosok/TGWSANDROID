@@ -34,11 +34,8 @@ class MsgSplitter(relayInit: ByteArray, private val protoInt: Long) {
 
         ensureCapacity(length)
         System.arraycopy(chunk, offset, cipherBuf, bufLen, length)
-        
-        val plainChunk = ByteArray(length)
-        dec.update(chunk, offset, length, plainChunk, 0)
-        System.arraycopy(plainChunk, 0, plainBuf, bufLen, length)
-        
+        dec.update(chunk, offset, length, plainBuf, bufLen)
+
         bufLen += length
 
         val parts = mutableListOf<ByteArray>()

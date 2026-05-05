@@ -67,6 +67,7 @@ class ProxyEngine(val config: ProxyConfig) {
                 try {
                     val clientSocket = ss.accept()
                     clientSocket.tcpNoDelay = true
+                    try { clientSocket.keepAlive = true } catch (_: Exception) {}
                     try {
                         clientSocket.sendBufferSize = config.bufferSize
                         clientSocket.receiveBufferSize = config.bufferSize
@@ -131,7 +132,7 @@ class ProxyEngine(val config: ProxyConfig) {
             
             clientSocket.soTimeout = 5000
             val handshake = readExactly(input, Constants.HANDSHAKE_LEN)
-            clientSocket.soTimeout = 0 
+            clientSocket.soTimeout = Constants.CLIENT_IDLE_TIMEOUT_MS
 
             if (handshake == null) {
                 logMessage("[$label] client disconnected before handshake")
@@ -174,7 +175,7 @@ class ProxyEngine(val config: ProxyConfig) {
                 logMessage("[$label] DC$dcId$mediaTag $reason -> fallback")
 
                 val splitter = try { MsgSplitter(relayInit, protoInt) } catch (_: Exception) { null }
-                val ok = Fallback.doFallback(input, output, relayInit, label, dcId, isMedia, mediaTag, ctx, config, splitter)
+                val ok = Fallback.doFallback(input, output, relayInit, label, dcId, isMedia, mediaTag, ctx, config, splitter, clientSocket)
                 
                 if (ok) {
                     if (reason != "CF proxy priority") logMessage("[$label] DC$dcId$mediaTag fallback closed")
@@ -241,7 +242,7 @@ class ProxyEngine(val config: ProxyConfig) {
 
                 if (!useCfPriority) {
                     val splitter = try { MsgSplitter(relayInit, protoInt) } catch (_: Exception) { null }
-                    val ok = Fallback.doFallback(input, output, relayInit, label, dcId, isMedia, mediaTag, ctx, config, splitter)
+                    val ok = Fallback.doFallback(input, output, relayInit, label, dcId, isMedia, mediaTag, ctx, config, splitter, clientSocket)
                     if (ok) logMessage("[$label] DC$dcId$mediaTag fallback closed")
                 }
                 return
@@ -256,7 +257,7 @@ class ProxyEngine(val config: ProxyConfig) {
 
             ws.send(relayInit)
 
-            Bridge.bridgeWsReencrypt(input, output, ws, label, ctx, dcId, isMedia, splitter)
+            Bridge.bridgeWsReencrypt(input, output, ws, label, ctx, dcId, isMedia, splitter, clientSocket)
 
         } catch (e: Exception) {
             Log.e(TAG, "[$label] unexpected: $e")

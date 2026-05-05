@@ -27,7 +27,7 @@ class WsPool(private val config: ProxyConfig) {
     init {
         keepAliveExecutor.scheduleWithFixedDelay({
             pingAll()
-        }, 30, 30, TimeUnit.SECONDS)
+        }, Constants.WS_PING_INTERVAL_SEC, Constants.WS_PING_INTERVAL_SEC, TimeUnit.SECONDS)
     }
 
     private fun pingAll() {
@@ -37,13 +37,16 @@ class WsPool(private val config: ProxyConfig) {
             while (it.hasNext()) {
                 val entry = it.next()
                 val age = now - entry.createdAt
-                if (age > Constants.WS_POOL_MAX_AGE || entry.ws.isClosed) {
+                val pongOverdue = entry.ws.isPongOverdue(now, Constants.WS_PONG_TIMEOUT_MS)
+                if (age > Constants.WS_POOL_MAX_AGE || entry.ws.isClosed || pongOverdue) {
                     it.remove()
                     try { entry.ws.close() } catch (_: Exception) {}
+                    if (pongOverdue) Log.w(TAG, "WS pool entry dropped: pong overdue")
                 } else {
                     if (!entry.ws.sendPing()) {
                         it.remove()
                         try { entry.ws.close() } catch (_: Exception) {}
+                        Log.w(TAG, "WS pool entry dropped: ping send failed")
                     }
                 }
             }

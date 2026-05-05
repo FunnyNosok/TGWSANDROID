@@ -20,7 +20,8 @@ object Bridge {
         ctx: CryptoContext,
         dc: Int = 0,
         isMedia: Boolean = false,
-        splitter: MsgSplitter? = null
+        splitter: MsgSplitter? = null,
+        clientSocket: Socket? = null
     ) {
         val dcTag = "DC$dc${if (isMedia) "m" else ""}"
         val upBytes = AtomicLong(0)
@@ -30,6 +31,11 @@ object Bridge {
         val startTime = System.currentTimeMillis()
         val done = AtomicBoolean(false)
         val latch = CountDownLatch(1)
+
+        fun closeBoth() {
+            try { ws.close() } catch (_: Exception) {}
+            try { clientSocket?.close() } catch (_: Exception) {}
+        }
 
         val tcpToWs = Thread({
             try {
@@ -62,6 +68,7 @@ object Bridge {
             } catch (_: Exception) {
             } finally {
                 done.set(true)
+                closeBoth()
                 latch.countDown()
             }
         }, "tcp->ws-$label")
@@ -85,6 +92,7 @@ object Bridge {
             } catch (_: Exception) {
             } finally {
                 done.set(true)
+                closeBoth()
                 latch.countDown()
             }
         }, "ws->tcp-$label")
@@ -116,10 +124,17 @@ object Bridge {
         remoteInput: InputStream,
         remoteOutput: OutputStream,
         label: String,
-        ctx: CryptoContext
+        ctx: CryptoContext,
+        clientSocket: Socket? = null,
+        remoteSocket: Socket? = null
     ) {
         val done = AtomicBoolean(false)
         val latch = CountDownLatch(1)
+
+        fun closeBoth() {
+            try { clientSocket?.close() } catch (_: Exception) {}
+            try { remoteSocket?.close() } catch (_: Exception) {}
+        }
 
         fun forward(src: InputStream, dst: OutputStream, isUp: Boolean, name: String): Thread {
             return Thread({
@@ -145,6 +160,7 @@ object Bridge {
                 } catch (_: Exception) {
                 } finally {
                     done.set(true)
+                    closeBoth()
                     latch.countDown()
                 }
             }, name)

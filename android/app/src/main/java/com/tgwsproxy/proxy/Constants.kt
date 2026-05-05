@@ -50,6 +50,11 @@ object Constants {
     const val WS_FAIL_TIMEOUT = 8.0
     const val WS_POOL_MAX_AGE = 120_000L
 
+    const val CLIENT_IDLE_TIMEOUT_MS = 60_000
+    const val WS_READ_TIMEOUT_MS = 45_000
+    const val WS_PING_INTERVAL_SEC = 20L
+    const val WS_PONG_TIMEOUT_MS = 45_000L
+
     fun humanBytes(n: Long): String {
         var value = n.toDouble()
         for (unit in arrayOf("B", "KB", "MB", "GB")) {

@@ -34,6 +34,12 @@ class RawWebSocket private constructor(
     @Volatile
     private var closed = false
 
+    @Volatile
+    private var lastPongAt: Long = System.currentTimeMillis()
+
+    @Volatile
+    private var lastPingAt: Long = 0L
+
     companion object {
         private const val OP_BINARY = 0x2
         private const val OP_CLOSE = 0x8
@@ -52,11 +58,14 @@ class RawWebSocket private constructor(
             }
         }
 
+        private val sharedRandom = ThreadLocal.withInitial { java.util.Random() }
+
         fun connect(host: String, domain: String, timeoutMs: Int = 10000, dpiBypass: Boolean = false): RawWebSocket {
             val rawSocket = Socket()
             rawSocket.connect(InetSocketAddress(host, 443), timeoutMs)
             rawSocket.soTimeout = timeoutMs
             rawSocket.tcpNoDelay = true
+            try { rawSocket.keepAlive = true } catch (_: Exception) {}
 
             if (dpiBypass) {
                 // Set small send buffer to encourage fragmentation
@@ -73,7 +82,7 @@ class RawWebSocket private constructor(
             sslSocket.startHandshake()
 
             val input = BufferedInputStream(sslSocket.getInputStream(), 65536)
-            val output = sslSocket.getOutputStream()
+            val output = java.io.BufferedOutputStream(sslSocket.getOutputStream(), 65536)
 
             val wsKey = Base64.encodeToString(
                 ByteArray(16).also { SecureRandom().nextBytes(it) },
@@ -147,7 +156,7 @@ class RawWebSocket private constructor(
             val statusCode = parts.getOrNull(1)?.toIntOrNull() ?: 0
 
             if (statusCode == 101) {
-                sslSocket.soTimeout = 90000
+                sslSocket.soTimeout = Constants.WS_READ_TIMEOUT_MS
                 return RawWebSocket(sslSocket, input, output)
             }
 
@@ -163,12 +172,12 @@ class RawWebSocket private constructor(
             throw WsHandshakeError(statusCode, firstLine, headers, headers["location"])
         }
 
-        private fun xorMask(data: ByteArray, offset: Int, length: Int, mask: ByteArray): ByteArray {
-            val result = ByteArray(length)
-            for (i in 0 until length) {
-                result[i] = (data[offset + i].toInt() xor mask[i % 4].toInt()).toByte()
+        private fun xorMaskInPlace(buf: ByteArray, dataOff: Int, length: Int, mask: ByteArray) {
+            var i = 0
+            while (i < length) {
+                buf[dataOff + i] = (buf[dataOff + i].toInt() xor mask[i and 3].toInt()).toByte()
+                i++
             }
-            return result
         }
 
         private fun buildFrame(opcode: Int, data: ByteArray, offset: Int, length: Int, mask: Boolean): ByteArray {
@@ -184,56 +193,58 @@ class RawWebSocket private constructor(
                         buf
                     }
                     length < 65536 -> {
-                        val buf = ByteBuffer.allocate(4 + length).order(ByteOrder.BIG_ENDIAN)
-                        buf.put(fb)
-                        buf.put(126.toByte())
-                        buf.putShort(length.toShort())
-                        buf.put(data, offset, length)
-                        buf.array()
+                        val buf = ByteArray(4 + length)
+                        buf[0] = fb
+                        buf[1] = 126.toByte()
+                        buf[2] = (length ushr 8).toByte()
+                        buf[3] = length.toByte()
+                        System.arraycopy(data, offset, buf, 4, length)
+                        buf
                     }
                     else -> {
-                        val buf = ByteBuffer.allocate(10 + length).order(ByteOrder.BIG_ENDIAN)
-                        buf.put(fb)
-                        buf.put(127.toByte())
-                        buf.putLong(length.toLong())
-                        buf.put(data, offset, length)
-                        buf.array()
+                        val buf = ByteArray(10 + length)
+                        buf[0] = fb
+                        buf[1] = 127.toByte()
+                        ByteBuffer.wrap(buf, 2, 8).order(ByteOrder.BIG_ENDIAN).putLong(length.toLong())
+                        System.arraycopy(data, offset, buf, 10, length)
+                        buf
                     }
                 }
             }
 
-            val maskKey = ByteArray(4)
-            SecureRandom().nextBytes(maskKey)
-            val masked = xorMask(data, offset, length, maskKey)
-
-            return when {
+            val rng = sharedRandom.get()!!
+            val (headerLen, frame) = when {
                 length < 126 -> {
-                    val buf = ByteArray(6 + length)
-                    buf[0] = fb
-                    buf[1] = (0x80 or length).toByte()
-                    System.arraycopy(maskKey, 0, buf, 2, 4)
-                    System.arraycopy(masked, 0, buf, 6, length)
-                    buf
+                    val f = ByteArray(6 + length)
+                    f[0] = fb
+                    f[1] = (0x80 or length).toByte()
+                    6 to f
                 }
                 length < 65536 -> {
-                    val buf = ByteBuffer.allocate(8 + length).order(ByteOrder.BIG_ENDIAN)
-                    buf.put(fb)
-                    buf.put((0x80 or 126).toByte())
-                    buf.putShort(length.toShort())
-                    buf.put(maskKey)
-                    buf.put(masked)
-                    buf.array()
+                    val f = ByteArray(8 + length)
+                    f[0] = fb
+                    f[1] = (0x80 or 126).toByte()
+                    f[2] = (length ushr 8).toByte()
+                    f[3] = length.toByte()
+                    8 to f
                 }
                 else -> {
-                    val buf = ByteBuffer.allocate(14 + length).order(ByteOrder.BIG_ENDIAN)
-                    buf.put(fb)
-                    buf.put((0x80 or 127).toByte())
-                    buf.putLong(length.toLong())
-                    buf.put(maskKey)
-                    buf.put(masked)
-                    buf.array()
+                    val f = ByteArray(14 + length)
+                    f[0] = fb
+                    f[1] = (0x80 or 127).toByte()
+                    ByteBuffer.wrap(f, 2, 8).order(ByteOrder.BIG_ENDIAN).putLong(length.toLong())
+                    14 to f
                 }
             }
+            val maskOff = headerLen - 4
+            frame[maskOff] = rng.nextInt().toByte()
+            frame[maskOff + 1] = rng.nextInt().toByte()
+            frame[maskOff + 2] = rng.nextInt().toByte()
+            frame[maskOff + 3] = rng.nextInt().toByte()
+            val maskKey = byteArrayOf(frame[maskOff], frame[maskOff + 1], frame[maskOff + 2], frame[maskOff + 3])
+            System.arraycopy(data, offset, frame, headerLen, length)
+            xorMaskInPlace(frame, headerLen, length, maskKey)
+            return frame
         }
     }
 
@@ -283,7 +294,10 @@ class RawWebSocket private constructor(
                     } catch (_: Exception) {}
                     continue
                 }
-                OP_PONG -> continue
+                OP_PONG -> {
+                    lastPongAt = System.currentTimeMillis()
+                    continue
+                }
                 0x1, 0x2 -> return payload
                 else -> continue
             }
@@ -309,11 +323,10 @@ class RawWebSocket private constructor(
 
         val payload = readExactly(input, length.toInt()) ?: return null
 
-        return if (maskKey != null) {
-            opcode to xorMask(payload, 0, payload.size, maskKey)
-        } else {
-            opcode to payload
+        if (maskKey != null) {
+            xorMaskInPlace(payload, 0, payload.size, maskKey)
         }
+        return opcode to payload
     }
 
     private fun readExactly(stream: InputStream, n: Int): ByteArray? {
@@ -335,10 +348,16 @@ class RawWebSocket private constructor(
                 output.write(buildFrame(OP_PING, byteArrayOf(), 0, 0, mask = true))
                 output.flush()
             }
+            lastPingAt = System.currentTimeMillis()
             true
         } catch (_: Exception) {
             false
         }
+    }
+
+    fun isPongOverdue(now: Long, timeoutMs: Long): Boolean {
+        if (lastPingAt == 0L) return false
+        return lastPongAt < lastPingAt && now - lastPingAt > timeoutMs
     }
 
     fun close() {

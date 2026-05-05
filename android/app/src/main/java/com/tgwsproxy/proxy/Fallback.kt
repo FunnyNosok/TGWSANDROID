@@ -20,7 +20,8 @@ object Fallback {
         mediaTag: String,
         ctx: CryptoContext,
         config: ProxyConfig,
-        splitter: MsgSplitter? = null
+        splitter: MsgSplitter? = null,
+        clientSocket: Socket? = null
     ): Boolean {
         val fallbackDst = Constants.DC_DEFAULT_IPS[dc]
         val useCf = config.fallbackCfProxy
@@ -36,13 +37,13 @@ object Fallback {
         for (method in methods.distinct()) {
             when (method) {
                 "cf" -> {
-                    if (cfProxyFallback(clientInput, clientOutput, relayInit, label, ctx, dc, isMedia, splitter))
+                    if (cfProxyFallback(clientInput, clientOutput, relayInit, label, ctx, dc, isMedia, splitter, clientSocket, config))
                         return true
                 }
                 "tcp" -> {
                     if (fallbackDst != null) {
                         Log.i(TAG, "[$label] DC$dc$mediaTag -> TCP fallback to $fallbackDst:443")
-                        if (tcpFallback(clientInput, clientOutput, fallbackDst, 443, relayInit, label, ctx))
+                        if (tcpFallback(clientInput, clientOutput, fallbackDst, 443, relayInit, label, ctx, clientSocket))
                             return true
                     }
                 }
@@ -59,7 +60,9 @@ object Fallback {
         ctx: CryptoContext,
         dc: Int,
         isMedia: Boolean,
-        splitter: MsgSplitter? = null
+        splitter: MsgSplitter?,
+        clientSocket: Socket?,
+        config: ProxyConfig
     ): Boolean {
         val mediaTag = if (isMedia) " media" else ""
         Log.i(TAG, "[$label] DC$dc$mediaTag -> trying CF proxy")
@@ -95,7 +98,7 @@ object Fallback {
 
         ProxyStats.connectionsCfProxy.incrementAndGet()
         ws.send(relayInit)
-        Bridge.bridgeWsReencrypt(clientInput, clientOutput, ws, label, ctx, dc, isMedia, splitter)
+        Bridge.bridgeWsReencrypt(clientInput, clientOutput, ws, label, ctx, dc, isMedia, splitter, clientSocket)
         return true
     }
 
@@ -106,12 +109,14 @@ object Fallback {
         port: Int,
         relayInit: ByteArray,
         label: String,
-        ctx: CryptoContext
+        ctx: CryptoContext,
+        clientSocket: Socket?
     ): Boolean {
         return try {
             val remoteSocket = Socket()
             remoteSocket.connect(InetSocketAddress(dst, port), 10000)
             remoteSocket.tcpNoDelay = true
+            try { remoteSocket.keepAlive = true } catch (_: Exception) {}
 
             val remoteInput = remoteSocket.getInputStream()
             val remoteOutput = remoteSocket.getOutputStream()
@@ -120,7 +125,7 @@ object Fallback {
             remoteOutput.write(relayInit)
             remoteOutput.flush()
 
-            Bridge.bridgeTcpReencrypt(clientInput, clientOutput, remoteInput, remoteOutput, label, ctx)
+            Bridge.bridgeTcpReencrypt(clientInput, clientOutput, remoteInput, remoteOutput, label, ctx, clientSocket, remoteSocket)
             try { remoteSocket.close() } catch (_: Exception) {}
             true
         } catch (e: Exception) {
